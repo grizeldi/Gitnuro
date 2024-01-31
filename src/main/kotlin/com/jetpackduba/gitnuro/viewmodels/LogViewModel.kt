@@ -10,8 +10,9 @@ import com.jetpackduba.gitnuro.git.TabState
 import com.jetpackduba.gitnuro.git.TaskEvent
 import com.jetpackduba.gitnuro.git.branches.CreateBranchOnCommitUseCase
 import com.jetpackduba.gitnuro.git.branches.GetCurrentBranchUseCase
-import com.jetpackduba.gitnuro.git.graph.GraphCommitList
+import com.jetpackduba.gitnuro.git.graph.GraphCommitList2
 import com.jetpackduba.gitnuro.git.graph.GraphNode
+import com.jetpackduba.gitnuro.git.graph.GraphNode2
 import com.jetpackduba.gitnuro.git.log.*
 import com.jetpackduba.gitnuro.git.rebase.StartRebaseInteractiveUseCase
 import com.jetpackduba.gitnuro.git.tags.CreateTagOnCommitUseCase
@@ -283,19 +284,20 @@ class LogViewModel @Inject constructor(
     fun selectCommit(commit: GraphNode) = tabState.runOperation(
         refreshType = RefreshType.NONE,
     ) {
-        tabState.newSelectedCommit(commit)
-
-        val searchValue = _logSearchFilterResults.value
-        if (searchValue is LogSearch.SearchResults) {
-            var index = searchValue.commits.indexOf(commit)
-
-            if (index == -1)
-                index = getLastIndexSelected()
-            else
-                index += 1  // +1 because UI count starts at 1
-
-            _logSearchFilterResults.value = searchValue.copy(index = index)
-        }
+        // TODO Graph refactor
+//        tabState.newSelectedCommit(commit)
+//
+//        val searchValue = _logSearchFilterResults.value
+//        if (searchValue is LogSearch.SearchResults) {
+//            var index = searchValue.commits.indexOf(commit)
+//
+//            if (index == -1)
+//                index = getLastIndexSelected()
+//            else
+//                index += 1  // +1 because UI count starts at 1
+//
+//            _logSearchFilterResults.value = searchValue.copy(index = index)
+//        }
     }
 
     suspend fun onSearchValueChanged(searchTerm: String) {
@@ -320,7 +322,7 @@ class LogViewModel @Inject constructor(
             var startingUiIndex = NONE_MATCHING_INDEX
 
             if (matchingCommits.isNotEmpty()) {
-                _focusCommit.emit(matchingCommits.first())
+//             TODO Graph refactor   _focusCommit.emit(matchingCommits.first())
                 startingUiIndex = FIRST_INDEX
             }
 
@@ -346,7 +348,7 @@ class LogViewModel @Inject constructor(
         val newCommitToSelect = commits[newIndex - 1]
 
         _logSearchFilterResults.value = logSearchFilterResultsValue.copy(index = newIndex)
-        _focusCommit.emit(newCommitToSelect)
+//        TODO Graph refactor  _focusCommit.emit(newCommitToSelect)
     }
 
     suspend fun selectNextFilterCommit() {
@@ -368,7 +370,7 @@ class LogViewModel @Inject constructor(
         val newCommitToSelect = commits[index]
 
         _logSearchFilterResults.value = logSearchFilterResultsValue.copy(index = newIndex)
-        _focusCommit.emit(newCommitToSelect)
+//  TODO Graph refactor      _focusCommit.emit(newCommitToSelect)
     }
 
     fun showDialog(dialog: LogDialog) {
@@ -393,7 +395,7 @@ sealed interface LogStatus {
     data object Loading : LogStatus
     class Loaded(
         val hasUncommittedChanges: Boolean,
-        val plotCommitList: GraphCommitList,
+        val plotCommitList: GraphCommitList2,
         val currentBranch: Ref?,
         val statusSummary: StatusSummary,
         val commitsLimit: Int,
@@ -403,7 +405,7 @@ sealed interface LogStatus {
 sealed interface LogSearch {
     data object NotSearching : LogSearch
     data class SearchResults(
-        val commits: List<GraphNode>,
+        val commits: List<GraphNode2>,
         val index: Int,
         val totalCount: Int = commits.count(),
     ) : LogSearch
