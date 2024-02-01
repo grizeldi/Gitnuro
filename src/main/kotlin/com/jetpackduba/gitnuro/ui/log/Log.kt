@@ -41,9 +41,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.jetpackduba.gitnuro.AppIcons
 import com.jetpackduba.gitnuro.extensions.*
-import com.jetpackduba.gitnuro.git.graph.GraphCommitList
 import com.jetpackduba.gitnuro.git.graph.GraphCommitList2
-import com.jetpackduba.gitnuro.git.graph.GraphNode
 import com.jetpackduba.gitnuro.git.graph.GraphNode2
 import com.jetpackduba.gitnuro.git.workspace.StatusSummary
 import com.jetpackduba.gitnuro.keybindings.KeybindingOption
@@ -162,18 +160,18 @@ private fun LogLoaded(
         null
     }
 
-//    LaunchedEffect(verticalScrollState, commitList) {
-//        launch {
-//            logViewModel.focusCommit.collect { commit ->
-//                scrollToCommit(verticalScrollState, commitList, commit)
-//            }
-//        }
-//        launch {
-//            logViewModel.scrollToUncommittedChanges.collect {
-//                scrollToUncommittedChanges(verticalScrollState, commitList)
-//            }
-//        }
-//    }
+    LaunchedEffect(verticalScrollState, commitList) {
+        launch {
+            logViewModel.focusCommit.collect { commit ->
+                scrollToCommit(verticalScrollState, commitList, commit)
+            }
+        }
+        launch {
+            logViewModel.scrollToUncommittedChanges.collect {
+                scrollToUncommittedChanges(verticalScrollState, commitList)
+            }
+        }
+    }
 
     LogDialogs(
         logViewModel,
@@ -193,7 +191,7 @@ private fun LogLoaded(
         if (graphWidth.value < CANVAS_MIN_WIDTH) graphWidth = CANVAS_MIN_WIDTH.dp
 
         val maxLinePosition = if (commitList.isNotEmpty())
-            commitList.maxLine
+            commitList.maxLane
         else
             MIN_GRAPH_LANES
 
@@ -334,7 +332,7 @@ private fun LogLoaded(
 
 suspend fun scrollToCommit(
     verticalScrollState: LazyListState,
-    commitList: GraphCommitList,
+    commitList: GraphCommitList2,
     commit: RevCommit?,
 ) {
     val index = commitList.indexOfFirst { it.name == commit?.name }
@@ -346,7 +344,7 @@ suspend fun scrollToCommit(
 
 suspend fun scrollToUncommittedChanges(
     verticalScrollState: LazyListState,
-    commitList: GraphCommitList,
+    commitList: GraphCommitList2,
 ) {
     if (commitList.isNotEmpty())
         verticalScrollState.scrollToItem(0)

@@ -11,7 +11,6 @@ import com.jetpackduba.gitnuro.git.TaskEvent
 import com.jetpackduba.gitnuro.git.branches.CreateBranchOnCommitUseCase
 import com.jetpackduba.gitnuro.git.branches.GetCurrentBranchUseCase
 import com.jetpackduba.gitnuro.git.graph.GraphCommitList2
-import com.jetpackduba.gitnuro.git.graph.GraphNode
 import com.jetpackduba.gitnuro.git.graph.GraphNode2
 import com.jetpackduba.gitnuro.git.log.*
 import com.jetpackduba.gitnuro.git.rebase.StartRebaseInteractiveUseCase
@@ -144,14 +143,14 @@ class LogViewModel @Inject constructor(
         val commitsLimit = if (appSettingsRepository.commitsLimitEnabled) {
             appSettingsRepository.commitsLimit
         } else
-            Int.MAX_VALUE
+            null
 
         val commitsLimitDisplayed = if (appSettingsRepository.commitsLimitEnabled) {
             appSettingsRepository.commitsLimit
         } else
             -1
 
-        val log = getLogUseCase(git, currentBranch, hasUncommittedChanges, commitsLimit)
+        val log = getLogUseCase(git, hasUncommittedChanges, commitsLimit)
 
         _logStatus.value =
             LogStatus.Loaded(hasUncommittedChanges, log, currentBranch, statusSummary, commitsLimitDisplayed)
@@ -281,7 +280,7 @@ class LogViewModel @Inject constructor(
             NONE_MATCHING_INDEX
     }
 
-    fun selectCommit(commit: GraphNode) = tabState.runOperation(
+    fun selectCommit(commit: GraphNode2) = tabState.runOperation(
         refreshType = RefreshType.NONE,
     ) {
         // TODO Graph refactor
