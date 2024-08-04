@@ -11,7 +11,7 @@ data class GraphNode2(
     val message: String,
     val fullMessage: String,
     val authorIdent: PersonIdent,
-    val committerIdent: PersonIdent,
+//    val committerIdent: PersonIdent,
     val parentCount: Int,
     val isStash: Boolean,
     val lane: Int,

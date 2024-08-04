@@ -314,7 +314,7 @@ class LogViewModel @Inject constructor(
             val matchingCommits = plotCommitList.filter {
                 it.fullMessage.lowercase().contains(lowercaseValue) ||
                         it.authorIdent.name.lowercase().contains(lowercaseValue) ||
-                        it.committerIdent.name.lowercase().contains(lowercaseValue) ||
+// TODO                        it.committerIdent.name.lowercase().contains(lowercaseValue) ||
                         it.name.lowercase().contains(lowercaseValue)
             }
 

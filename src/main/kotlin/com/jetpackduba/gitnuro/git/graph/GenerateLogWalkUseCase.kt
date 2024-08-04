@@ -5,55 +5,74 @@ import kotlinx.coroutines.withContext
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.lib.Ref
 import org.eclipse.jgit.revwalk.RevCommit
+import java.util.*
 import javax.inject.Inject
+import kotlin.collections.HashMap
 
+class PoolGraphComparator() : Comparator<PoolGraphNode> {
+    override fun compare(o1: PoolGraphNode, o2: PoolGraphNode): Int {
+//        return o1.authorWhen.compareTo(o2.authorWhen)
+        return o1.revCommit.commitTime.compareTo(o2.revCommit.commitTime)
+    }
+
+}
 
 class GenerateLogWalkUseCase @Inject constructor() {
-    suspend operator fun invoke(
+    operator fun invoke(
         git: Git,
         firstCommit: RevCommit,
         allRefs: List<Ref>,
         stashes: List<RevCommit>,
         hasUncommittedChanges: Boolean,
         commitsLimit: Int?,
-    ): GraphCommitList2 = withContext(Dispatchers.IO) {
+    ): GraphCommitList2 /*= withContext(Dispatchers.IO)*/ {
+        // TODO perhaps use ConcurrentHashMap
+        val cachedParents = HashMap<String, RevCommit>()
+
+        val sortedAvailableRefs = TreeSet<PoolGraphNode>(PoolGraphComparator())
         val reservedLanes = mutableMapOf<Int, String>()
         val graphNodes = mutableListOf<GraphNode2>()
         var maxLane = 0
 
-        val availableCommitsToAdd = mutableMapOf<String, RevCommit>()
+        // TODO Perhaps use ConcurrentHashMap
+        val availableCommitsToAdd = mutableMapOf<String, PoolGraphNode>()
 
         val refsWithCommits = allRefs.map {
-            val commit = git.repository.parseCommit(it.objectId)
+            val commit = cachedParents.getOrPut(it.objectId.name) { git.repository.parseCommit(it.objectId) }
 
             commit to it
         }
 
         val commitsOfRefs = refsWithCommits.map {
-            it.first.name to it.first
+            it.first.name to PoolGraphNode(-1, it.first)
         }
 
-        val commitsOfStashes = stashes.map { it.name to it }
+        val commitsOfStashes = stashes.map { it.name to PoolGraphNode(-1, it) }
 
-        availableCommitsToAdd[firstCommit.name] = firstCommit
+        availableCommitsToAdd[firstCommit.name] = PoolGraphNode(-1, firstCommit)
         availableCommitsToAdd.putAll(commitsOfRefs)
         availableCommitsToAdd.putAll(commitsOfStashes)
 
-        var currentCommit = getNextCommit(availableCommitsToAdd.values.toList())
+        sortedAvailableRefs.addAll(commitsOfRefs.map { it.second })
+        sortedAvailableRefs.addAll(commitsOfStashes.map { it.second })
+
+
+        var currentCommit = getNextCommit(sortedAvailableRefs)
 
         if (hasUncommittedChanges) {
             reservedLanes[0] = firstCommit.name
         }
 
-        availableCommitsToAdd.remove(currentCommit?.name)
+        sortedAvailableRefs.remove(currentCommit)
+        availableCommitsToAdd.remove(currentCommit?.revCommit?.name)
 
         while (currentCommit != null && (commitsLimit == null || graphNodes.count() <= commitsLimit)) {
-            val lanes = getReservedLanes(reservedLanes, currentCommit.name)
+            val lanes = getReservedLanes(reservedLanes, currentCommit.revCommit.name)
             val lane = lanes.first()
             val forkingLanes = lanes - lane
-            val isStash = stashes.any { it == currentCommit }
+            val isStash = stashes.any { it == currentCommit!!.revCommit }
 
-            val parents = sortParentsByPriority(git, currentCommit)
+            val parents = sortParentsByPriority(git, currentCommit.revCommit, cachedParents)
                 .filterStashParentsIfRequired(isStash)
 
             val parentsCount = parents.count()
@@ -62,40 +81,40 @@ class GenerateLogWalkUseCase @Inject constructor() {
                 reservedLanes[lane] = parents.first().name
             } else if (parentsCount > 1) {
                 reservedLanes[lane] = parents.first().name
-
-                for (i in 1 until parentsCount) {
-                    val availableLane = firstAvailableLane(reservedLanes)
-                    reservedLanes[availableLane] = parents[i].name
-                    mergingLanes.add(availableLane)
-                }
             }
 
-            val refs = refsByCommit(refsWithCommits, currentCommit)
+            val refs = refsByCommit(refsWithCommits, currentCommit.revCommit)
 
-            val graphNode = createGraphNode(
-                currentCommit = currentCommit,
-                isStash = isStash,
-                lane = lane,
-                forkingLanes = forkingLanes,
-                reservedLanes = reservedLanes,
-                mergingLanes = mergingLanes,
-                refs = refs
-            )
+//            val graphNode = createGraphNode(
+//                currentCommit = currentCommit.revCommit,
+//                isStash = isStash,
+//                lane = lane,
+//                forkingLanes = forkingLanes,
+//                reservedLanes = reservedLanes,
+//                mergingLanes = mergingLanes,
+//                refs = refs
+//            )
 
             if (lane > maxLane) {
                 maxLane = lane
             }
 
-            graphNodes.add(graphNode)
-            removeFromAllLanes(reservedLanes, graphNode.name)
+//            graphNodes.add(graphNode)
+            removeFromAllLanes(reservedLanes, currentCommit.revCommit.name)
 
-            availableCommitsToAdd.putAll(parents.map { it.name to it })
+            for (parent in parents) {
+                val poolGraphNode = PoolGraphNode(graphNodes.lastIndex, parent)
+                availableCommitsToAdd[parent.name] = poolGraphNode
+                sortedAvailableRefs.add(poolGraphNode)
+            }
 
-            currentCommit = getNextCommit(availableCommitsToAdd.values.toList())
-            availableCommitsToAdd.remove(currentCommit?.name)
+            currentCommit = getNextCommit(sortedAvailableRefs)
+
+            sortedAvailableRefs.remove(currentCommit)
+            availableCommitsToAdd.remove(currentCommit?.revCommit?.name)
         }
 
-        GraphCommitList2(graphNodes, maxLane)
+        return GraphCommitList2(graphNodes, maxLane)
     }
 
     private fun createGraphNode(
@@ -111,7 +130,7 @@ class GenerateLogWalkUseCase @Inject constructor() {
         currentCommit.shortMessage,
         currentCommit.fullMessage,
         currentCommit.authorIdent,
-        currentCommit.committerIdent,
+//        currentCommit.committerIdent,
         currentCommit.parentCount,
         isStash = isStash,
         lane = lane,
@@ -128,10 +147,14 @@ class GenerateLogWalkUseCase @Inject constructor() {
         .filter { it.first == commit }
         .map { it.second }
 
-    private fun sortParentsByPriority(git: Git, currentCommit: RevCommit): List<RevCommit> {
+    private fun sortParentsByPriority(
+        git: Git,
+        currentCommit: RevCommit,
+        cachedParents: HashMap<String, RevCommit>,
+    ): List<RevCommit> {
         val parents = currentCommit
             .parents
-            .map { git.repository.parseCommit(it) }
+            .map { cachedParents.getOrPut(it.name) { git.repository.parseCommit(it) } }
             .toMutableList()
 
         return if (parents.count() <= 1) {
@@ -160,8 +183,10 @@ class GenerateLogWalkUseCase @Inject constructor() {
         }
     }
 
-    fun getNextCommit(availableCommits: List<RevCommit>): RevCommit? {
-        return availableCommits.sortedByDescending { it.committerIdent.`when` }.firstOrNull()
+    fun getNextCommit(availableCommits: TreeSet<PoolGraphNode>): PoolGraphNode? {
+//        var mostRecentPoolGraphNode: PoolGraphNode? = null
+
+        return availableCommits.firstOrNull()
     }
 
     fun getReservedLanes(reservedLanes: Map<Int, String>, hash: String): List<Int> {
@@ -214,9 +239,109 @@ class GenerateLogWalkUseCase @Inject constructor() {
     }
 }
 
+data class PoolGraphNode(
+    val parentIndex: Int,
+    val revCommit: RevCommit,
+
+) {
+//    val authorWhen: Date = revCommit.authorIdent.`when`
+}
+
 sealed interface ReservationType {
     val hash: String
 
-    class ParentInSameLane(override val hash: String): ReservationType
-    class ParentInVariableLane(override val hash: String): ReservationType
+    class ParentInSameLane(override val hash: String) : ReservationType
+    class ParentInVariableLane(override val hash: String) : ReservationType
 }
+
+
+//    suspend operator fun invoke(
+//        git: Git,
+//        firstCommit: RevCommit,
+//        allRefs: List<Ref>,
+//        stashes: List<RevCommit>,
+//        hasUncommittedChanges: Boolean,
+//        commitsLimit: Int?,
+//    ): GraphCommitList2 = withContext(Dispatchers.IO) {
+//        // TODO perhaps use ConcurrentHashMap
+//        val reservedLanes = mutableMapOf<Int, String>()
+//        val graphNodes = mutableListOf<GraphNode2>()
+//        var maxLane = 0
+//
+//        // TODO Perhaps use ConcurrentHashMap
+//        val availableCommitsToAdd = mutableMapOf<String, RevCommit>()
+//
+//        val refsWithCommits = allRefs.map {
+//            val commit = git.repository.parseCommit(it.objectId)
+//
+//            commit to it
+//        }
+//
+//        val commitsOfRefs = refsWithCommits.map {
+//            it.first.name to it.first
+//        }
+//
+//        val commitsOfStashes = stashes.map { it.name to it }
+//
+//        availableCommitsToAdd[firstCommit.name] = firstCommit
+//        availableCommitsToAdd.putAll(commitsOfRefs)
+//        availableCommitsToAdd.putAll(commitsOfStashes)
+//
+//        var currentCommit = getNextCommit(availableCommitsToAdd.values.toList())
+//
+//        if (hasUncommittedChanges) {
+//            reservedLanes[0] = firstCommit.name
+//        }
+//
+//        availableCommitsToAdd.remove(currentCommit?.name)
+//
+//        while (currentCommit != null && (commitsLimit == null || graphNodes.count() <= commitsLimit)) {
+//            val lanes = getReservedLanes(reservedLanes, currentCommit.name)
+//            val lane = lanes.first()
+//            val forkingLanes = lanes - lane
+//            val isStash = stashes.any { it == currentCommit }
+//
+//            val parents = sortParentsByPriority(git, currentCommit)
+//                .filterStashParentsIfRequired(isStash)
+//
+//            val parentsCount = parents.count()
+//            val mergingLanes = mutableListOf<Int>()
+//            if (parentsCount == 1) {
+//                reservedLanes[lane] = parents.first().name
+//            } else if (parentsCount > 1) {
+//                reservedLanes[lane] = parents.first().name
+//
+//                for (i in 1 until parentsCount) {
+//                    val availableLane = firstAvailableLane(reservedLanes)
+//                    reservedLanes[availableLane] = parents[i].name
+//                    mergingLanes.add(availableLane)
+//                }
+//            }
+//
+//            val refs = refsByCommit(refsWithCommits, currentCommit)
+//
+//            val graphNode = createGraphNode(
+//                currentCommit = currentCommit,
+//                isStash = isStash,
+//                lane = lane,
+//                forkingLanes = forkingLanes,
+//                reservedLanes = reservedLanes,
+//                mergingLanes = mergingLanes,
+//                refs = refs
+//            )
+//
+//            if (lane > maxLane) {
+//                maxLane = lane
+//            }
+//
+//            graphNodes.add(graphNode)
+//            removeFromAllLanes(reservedLanes, graphNode.name)
+//
+//            availableCommitsToAdd.putAll(parents.map { it.name to it })
+//
+//            currentCommit = getNextCommit(availableCommitsToAdd.values.toList())
+//            availableCommitsToAdd.remove(currentCommit?.name)
+//        }
+//
+//        GraphCommitList2(graphNodes, maxLane)
+//    }
