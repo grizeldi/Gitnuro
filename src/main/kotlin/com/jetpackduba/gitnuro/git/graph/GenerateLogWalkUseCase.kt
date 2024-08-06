@@ -1,10 +1,13 @@
 package com.jetpackduba.gitnuro.git.graph
 
+import com.jetpackduba.gitnuro.logging.printDebug
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.lib.Constants
 import org.eclipse.jgit.lib.Ref
 import org.eclipse.jgit.revwalk.RevCommit
+import org.eclipse.jgit.revwalk.RevWalk
 import java.util.*
 import javax.inject.Inject
 import kotlin.collections.HashMap
@@ -27,6 +30,19 @@ class GenerateLogWalkUseCase @Inject constructor() {
         commitsLimit: Int?,
     ): GraphCommitList2 /*= withContext(Dispatchers.IO)*/ {
         // TODO perhaps use ConcurrentHashMap
+
+        val walk = GraphWalk2(git.repository)
+        allRefs.forEach { ref ->
+            ref.objectId
+        }
+        walk.markStartAllRefs(Constants.R_HEADS)
+        var commit = walk.next()
+
+        while (commit != null) {
+            printDebug("COMMIT_MSG", commit.shortMessage)
+            commit = walk.next()
+        }
+
         val cachedParents = HashMap<String, RevCommit>()
 
         val sortedAvailableRefs = TreeSet<PoolGraphNode>(PoolGraphComparator())
@@ -83,7 +99,7 @@ class GenerateLogWalkUseCase @Inject constructor() {
                 reservedLanes[lane] = parents.first().name
             }
 
-            val refs = refsByCommit(refsWithCommits, currentCommit.revCommit)
+//            val refs = refsByCommit(refsWithCommits, currentCommit.revCommit)
 
 //            val graphNode = createGraphNode(
 //                currentCommit = currentCommit.revCommit,
@@ -154,10 +170,11 @@ class GenerateLogWalkUseCase @Inject constructor() {
     ): List<RevCommit> {
         val parents = currentCommit
             .parents
+//            .map { it.rawBuffer }
             .map { cachedParents.getOrPut(it.name) { git.repository.parseCommit(it) } }
             .toMutableList()
 
-        return if (parents.count() <= 1) {
+        /*return if (parents.count() <= 1) {
             parents
         } else if (parents.count() == 2) {
             if (parents[0].parents.any { it.name == parents[1].name }) {
@@ -169,7 +186,8 @@ class GenerateLogWalkUseCase @Inject constructor() {
             }
         } else {
             parents.sortedBy { it.committerIdent.`when` }
-        }
+        }*/
+        return parents.sortedBy { it.commitTime }
     }
 
     fun List<RevCommit>.filterStashParentsIfRequired(isStash: Boolean): List<RevCommit> {
@@ -243,7 +261,7 @@ data class PoolGraphNode(
     val parentIndex: Int,
     val revCommit: RevCommit,
 
-) {
+    ) {
 //    val authorWhen: Date = revCommit.authorIdent.`when`
 }
 
