@@ -47,7 +47,7 @@ repositories {
 }
 
 dependencies {
-    val jgit = "6.9.0.202403050737-r"
+    val jgit = "7.0.0.202409031743-r"
 
     if (currentOs() == OS.LINUX && isLinuxAarch64) {
         implementation(compose.desktop.linux_arm64)
