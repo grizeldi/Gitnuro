@@ -4,7 +4,7 @@
 
 ![Icon](res/img/cover.png)
 
-A FOSS Git client based on (Jetbrains) Compose and JGit.
+A FOSS Git client based on (Jetbrains) Compose and JGit. Development version for git-lfs support.
 
 The main goal of Gitnuro is to provide a multiplatform open source Git client without any kind of constraint to how you
 can use it nor relying on web technologies.
