@@ -59,6 +59,7 @@ dependencies {
     implementation(compose("org.jetbrains.compose.ui:ui-util"))
     implementation(compose("org.jetbrains.compose.components:components-animatedimage"))
     implementation("org.eclipse.jgit:org.eclipse.jgit:$jgit")
+    implementation("org.eclipse.jgit:org.eclipse.jgit.lfs:$jgit")
     implementation("org.eclipse.jgit:org.eclipse.jgit.gpg.bc:$jgit")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.0")
     implementation("com.google.dagger:dagger:2.48.1")
